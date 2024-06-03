@@ -1,16 +1,26 @@
-import puppeteer from "puppeteer";
 import "dotenv/config";
+import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import express from "express";
 import bcrypt from "bcrypt";
 import cors from "cors";
 import { MongoClient, ServerApiVersion } from "mongodb";
 const app = express();
-app.use(cors());
+
+app.use(cookieParser());
+const corsOptions = {
+  origin: "https://sukunlife.com",
+  // origin: "http://localhost:5173",
+  credentials: true,
+};
+app.use(cors(corsOptions));
+
 app.use(express.json());
 const port = process.env.PORT || 3000;
 
-var uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-hzckllx-shard-00-00.wvig2d6.mongodb.net:27017,ac-hzckllx-shard-00-01.wvig2d6.mongodb.net:27017,ac-hzckllx-shard-00-02.wvig2d6.mongodb.net:27017/?ssl=true&replicaSet=atlas-sxh7jl-shard-0&authSource=admin&retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.0jjrt8a.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// const uri = "mongodb+srv://sukunlifebd:<password>@cluster0.0jjrt8a.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -20,39 +30,112 @@ const client = new MongoClient(uri, {
   },
 });
 
-// verifying jwt token
-const verifyJWT = (req, res, next) => {
-  const authorization = req.headers.authorization;
-  if (!authorization) {
-    return res
-      .status(401)
-      .send({ error: true, message: "unauthorized access" });
+const verifyToken = (req, res, next) => {
+  let token = req?.cookies?.jwt;
+  const cookieHeader = req?.headers?.cookie;
+  if (!cookieHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
-  // bearer token
-  const token = authorization.split(" ")[1];
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    if (err) {
-      return res
-        .status(401)
-        .send({ error: true, message: "unauthorized access" });
-    }
-    req.decoded = decoded;
-    next();
-  });
-};
-const adminsCollection = client.db("sukunLife").collection("admins");
-const usersCollection = client.db("sukunLife").collection("users");
-// todo: verify json token
-app.post("/getInfo", verifyJWT, async (req, res) => {
-  const email = req.body.email;
-  if (req.decoded?.email !== email) {
-    res.send({ admin: false });
-    return;
+  if (!token) {
+    const cookies = cookieHeader?.split(";").reduce((cookies, cookie) => {
+      const [name, value] = cookie.trim().split("=");
+      cookies[name] = value;
+      return cookies;
+    }, {});
+    token = cookies;
   }
-  if (req.decoded?.email === email && email === process.env.ADMIN) {
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.clearCookie("jwt");
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+};
+
+app.get("/check-auth", verifyToken, (req, res) => {
+  return res.status(200).json({ message: "Authenticated" });
+});
+
+app.post("/sendEmail", async (req, res) => {
+  try {
+    const { formData } = req.body;
+    let transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: process.env.EMAIL_SERVICE_HOST,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_ID,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    let mailOptions = {
+      to: "sukunlifebd@gmail.com",
+      subject: "New Appointment", // Subject line
+      html: `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Appointment Details</title>
+    </head>
+    <body>
+        <h2>New Appointment Details</h2>
+        <ul>
+            <li><strong>Name:</strong> ${formData.name}</li>
+            <li><strong>Email:</strong> ${formData.email}</li>
+            <li><strong>Phone Number:</strong> ${formData.phoneNumber}</li>
+            <li><strong>Address:</strong> ${formData.address}</li>
+            <li><strong>Service:</strong> ${formData.service}</li>
+            <li><strong>Date:</strong> ${formData.date}</li>
+            <li><strong>Problem:</strong> ${formData.problem}</li>
+        </ul>
+    </body>
+    </html>`,
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      res.send({ status: 200, message: "Email sent successfully" });
+    } catch (error) {
+      res.send({ status: 500, message: `Error sending email, ${error}` });
+    }
+  } catch {
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
+const usersCollection = client.db("sukunLife").collection("users");
+
+app.get("/getInfo", verifyToken, async (req, res) => {
+  try {
     const result = await usersCollection.find().sort({ date: -1 }).toArray();
-    res.send(result);
+    return res.send(result);
+  } catch {
+    return res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+app.get("/logout", async (req, res) => {
+  try {
+    res.clearCookie("jwt");
+    return res.status(200).json({ message: "success to logout" });
+  } catch {
+    return res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+app.get("/clear-data", verifyToken, async (req, res) => {
+  try {
+    const result = await usersCollection.deleteMany({});
+    return res.status(200).send(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send("An error occurred while clearing data.");
   }
 });
 
@@ -62,65 +145,47 @@ app.post("/admin-login", async (req, res) => {
     res.send({ status: 401, message: "Password or Email is not valid" });
     return;
   } else {
-    bcrypt.compare(password, process.env.ADMIN_PASS, (err, result) => {
-      if (err) {
-        return res.status(401).json({ error: "Invalid email or password" });
-      } else if (result) {
-        res.send({ status: 200, message: "Success" });
+    try {
+      const result = await bcrypt.compare(password, process.env.ADMIN_PASS);
+      if (result) {
+        res.status(200).send({ message: "Success" });
+      } else {
+        res.status(401).send({ message: "Invalid password" });
       }
-    });
+    } catch {
+      console.error("Error comparing passwords:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
   }
 });
 app.post("/jwt", async (req, res) => {
-  const token = jwt.sign(
-    { email: process.env.ADMIN },
-    process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "7d" }
-  );
-  res.send(token);
+  try {
+    const token = jwt.sign(
+      { email: process.env.ADMIN },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'none',
+    });
+
+    res.sendStatus(200);
+  } catch {
+    res.status(500).send({ message: "Internal Server Error" });
+  }
 });
 
 app.post("/saveInfo", async (req, res) => {
-  const {
-    name,
-    address,
-    phoneNumber,
-    email,
-    maritalStatus,
-    familyMembersProblem,
-  } = req.body;
-
-
-  await usersCollection.insertOne(req.body);
-  // try {
-  //   const browser = await puppeteer.connect({
-  //     browserWSEndpoint: process.env.BROWSERLESS_URL,
-  //   });
-  //   const page = await browser.newPage();
-  //   await page.goto("https://forms.gle/zXhyHFL7GAP4qrur7", {
-  //     waitUntil: "networkidle0",
-  //   });
-  //   await page.waitForSelector("[role='button']");
-  //   await page.type('[aria-labelledby="i1"]', name);
-  //   await page.type('[aria-labelledby="i5"]', phoneNumber);
-  //   await page.type('[aria-labelledby="i13"]', address);
-  //   await page.type('[aria-labelledby="i9"]', email);
-  //   await page.type('[aria-labelledby="i17"]', maritalStatus);
-  //   await page.type('[aria-labelledby="i21"]', familyMembersProblem);
-  //   await page.evaluate(() => {
-  //     [...document.querySelectorAll("[role='button']")]
-  //       .find(
-  //         (btn) =>
-  //           btn.innerText == "জমা দিন" ||
-  //           btn.innerText == "submit" ||
-  //           btn.innerText == "Submit"
-  //       )
-  //       .click();
-  //   });
-  //   await page.close();
-  //   await browser.close();
-  // } catch {}
-  res.send({ status: 200, message: "Saved successfully" });
+  try {
+    await usersCollection.insertOne(req.body);
+    res.send({ status: 200, message: "Saved successfully" });
+  } catch {
+    res.status(500).send({ message: "Server error" });
+  }
 });
 
 app.get("/", (req, res) => {

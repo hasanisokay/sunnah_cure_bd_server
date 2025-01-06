@@ -310,7 +310,7 @@ app.post("/jwt", async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "strict",
+      sameSite: "none",
     });
     res.status(200).send({ message: "Authorized", status: 200 });
     // res.sendStatus(200);

@@ -20,7 +20,7 @@ app.use(cookieParser());
 
 const corsOptions = {
   origin: (origin, callback) => {
-    const allowedOrigins = ["http://localhost:5173", "https://sukunlife.com"];
+    const allowedOrigins = ["http://localhost:5173", "https://sunnahcurebd.netlify.app"];
 
     // Check if the origin is in the allowed list or if there's no origin (for internal requests)
     if (allowedOrigins.includes(origin) || !origin) {

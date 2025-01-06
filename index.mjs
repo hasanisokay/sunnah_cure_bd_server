@@ -40,7 +40,7 @@ const port = process.env.PORT || 3000;
 // console.log(process.env.DB_USER)
 // const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.vp5x6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-const uri = `mongodb+srv://test_user:${process.env.DB_PASS}@cluster0.vp5x6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.vp5x6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,

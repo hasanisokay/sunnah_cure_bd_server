@@ -8,6 +8,7 @@ import bcrypt from "bcrypt";
 import cors from "cors";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import formatDate from "./formatDate.mjs";
+import getServiceName from "./getServiceName.mjs";
 const app = express();
 
 app.use(cookieParser());
@@ -166,7 +167,7 @@ app.post("/sendEmail", async (req, res) => {
                         formData.phoneNumber
                       }</li>
                       <li><strong>Address:</strong> ${formData.address}</li>
-                      <li><strong>Service:</strong> ${formData.service}</li>
+                      <li><strong>Service:</strong> ${getServiceName(formData.service)}</li>
                       <li><strong>Date:</strong> ${formatDate(
                         new Date(formData.date)
                       )}</li>
